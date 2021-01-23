@@ -5,21 +5,15 @@ Resources:
   SshAccessSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Allow connections over ssh
+      GroupDescription: Security group for Jenkins master instance (ssh & web traffic)
       SecurityGroupIngress:
       - IpProtocol: tcp
         FromPort: 22
         ToPort: 22
         CidrIp: 0.0.0.0/0
-
-  JenkinsTrafficGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Allows traffic for jenkins server over 8080
-      SecurityGroupIngress:
       - IpProtocol: tcp
-        FromPort: 8080
-        ToPort: 8080
+        FromPort: 80
+        ToPort: 80
         CidrIp: 0.0.0.0/0
 
   JenkinsMasterLaunchTemplate:
@@ -64,13 +58,13 @@ Resources:
         StartJenkinsContainer:
           commands:
             test:
-              command: "docker run -d -p 8080:8080 jenkins/jenkins:lts"
+              command: "docker run -d -p 80:8080 jenkins/jenkins:lts"
     Properties:
       LaunchTemplate:
         LaunchTemplateId:
           Ref: JenkinsMasterLaunchTemplate
         Version: 1
-      SecurityGroupIds: [!Ref SshAccessSecurityGroup, !Ref JenkinsTrafficGroup]
+      SecurityGroupIds: [!Ref SshAccessSecurityGroup]
       KeyName: ssh-laptop
       UserData:
         Fn::Base64: !Sub |
@@ -83,6 +77,19 @@ Resources:
             --resource JenkinsMaster \
             --configsets Install \
             --region ${ AWS::Region }
+
+  JenkinsRecordSetGroup:
+    Type: 'AWS::Route53::RecordSetGroup'
+    DependsOn:
+      - JenkinsMasterLaunchTemplate
+    Properties:
+      HostedZoneId: ZT0O09PTBTJOV
+      RecordSets:
+        - Name: jenkins.morleystuff.com
+          Type: A
+          TTL: '900'
+          ResourceRecords:
+            - !GetAtt JenkinsMaster.PublicIp
   
   
 
