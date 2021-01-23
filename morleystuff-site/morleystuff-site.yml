@@ -132,7 +132,7 @@ Resources:
               commands:
                 - aws s3 cp --recursive --acl public-read ./build s3://${DeployBucket}/
                 - aws s3 cp --acl public-read --cache-control="max-age=0, no-cache, no-store, must-revalidate" ./build/index.html s3://${DeployBucket}/
-                - aws cloudfront create-invalidation --distribution-id ${Distribution} --paths /index.html /service-worker.js
+                - aws cloudfront create-invalidation --distribution-id ${MorleyStuffCloudFront} --paths /index.html /service-worker.js
           artifacts:
             files:
               - '**/*'
@@ -193,11 +193,18 @@ Resources:
     Properties:
       WebsiteConfiguration:
         IndexDocument: index.html
+        ErrorDocument: index.html
         
-  Distribution:
+  MorleyStuffCloudFront:
     Type: "AWS::CloudFront::Distribution"
     Properties:
       DistributionConfig:
+        Aliases:
+          - 'morleystuff.com'
+          - '*.morleystuff.com'
+        ViewerCertificate:
+          AcmCertificateArn: 'arn:aws:acm:us-east-1:365033114011:certificate/9f4ffc76-18d3-41e8-ba82-1aca7cc12ebf'
+          SslSupportMethod: 'sni-only'
         Origins:
           -
             DomainName: !GetAtt DeployBucket.DomainName
@@ -206,6 +213,15 @@ Resources:
               OriginAccessIdentity: ''
         DefaultRootObject: index.html
         Enabled: true
+        CustomErrorResponses:
+        - ErrorCode: '403'
+          ResponsePagePath: "/index.html"
+          ResponseCode: '200'
+          ErrorCachingMinTTL: '30'
+        - ErrorCode: '404'
+          ResponsePagePath: "/index.html"
+          ResponseCode: '200'
+          ErrorCachingMinTTL: '30'
         DefaultCacheBehavior:
           MinTTL: 86400    # 1 day
           MaxTTL: 31536000 # 1 year
@@ -213,3 +229,16 @@ Resources:
             QueryString: true
           TargetOriginId: !Ref DeployBucket
           ViewerProtocolPolicy: "redirect-to-https"
+
+  MorleyStuffDNS:
+    Type: 'AWS::Route53::RecordSetGroup'
+    Properties:
+      HostedZoneId: ZT0O09PTBTJOV
+      RecordSets:
+        - Name: morleystuff.com
+          Type: A
+          AliasTarget:
+            DNSName: !GetAtt
+              - MorleyStuffCloudFront
+              - DomainName
+            HostedZoneId: Z2FDTNDATAQYW2
