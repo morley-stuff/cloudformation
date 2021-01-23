@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Resources:
+
+  SshAccessSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow connections over ssh
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+
+  JenkinsTrafficGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allows traffic for jenkins server over 8080
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 8080
+        ToPort: 8080
+        CidrIp: 0.0.0.0/0
+
+  JenkinsMasterLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: JenkinsMasterLaunchTemplate
+      LaunchTemplateData: 
+        ImageId: ami-0e1a69c81175d6bf2
+        InstanceType: t2.micro
+        InstanceMarketOptions:
+          MarketType: spot
+          SpotOptions:
+            MaxPrice: "0.005"
+
+  JenkinsMaster:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - JenkinsMasterLaunchTemplate
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          Install:
+            - "InstallDocker"
+            - "PullJenkinsImage"
+            - "StartJenkinsContainer"
+        InstallDocker:
+          packages:
+            yum:
+              docker: []
+          services:
+            sysvinit:
+              docker:
+                enabled: "true"
+                ensureRunning: "true"
+                packages:
+                  yum:
+                    - "docker"
+        PullJenkinsImage:
+          commands:
+            test:
+              command: "docker pull jenkins/jenkins:lts"
+        StartJenkinsContainer:
+          commands:
+            test:
+              command: "docker run -d -p 8080:8080 jenkins/jenkins:lts"
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId:
+          Ref: JenkinsMasterLaunchTemplate
+        Version: 1
+      SecurityGroupIds: [!Ref SshAccessSecurityGroup, !Ref JenkinsTrafficGroup]
+      KeyName: ssh-laptop
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          
+          yum install -y aws-cfn-bootstrap
+
+          /opt/aws/bin/cfn-init -v \
+            --stack ${ AWS::StackName } \
+            --resource JenkinsMaster \
+            --configsets Install \
+            --region ${ AWS::Region }
+  
+  
+
