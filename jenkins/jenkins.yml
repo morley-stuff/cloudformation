@@ -1,5 +1,11 @@
 AWSTemplateFormatVersion: "2010-09-09"
 
+Parameters:
+  NetworkStackParameter:
+    Type: String
+    Default: network
+    Description: Network stack to deploy into.
+
 Resources:
 
   JenkinsMasterSecurityGroup:
@@ -15,7 +21,8 @@ Resources:
         FromPort: 80
         ToPort: 80
         CidrIp: 0.0.0.0/0
-      VpcId: !ImportValue network-VPC
+      VpcId: 
+        Fn::ImportValue: !Sub "${NetworkStackParameter}-VPC"
 
   JenkinsMasterLoadBalancerSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -30,7 +37,8 @@ Resources:
         FromPort: 443
         ToPort: 443
         CidrIp: 0.0.0.0/0
-      VpcId: !ImportValue network-VPC
+      VpcId: 
+        Fn::ImportValue: !Sub "${NetworkStackParameter}-VPC"
 
   JenkinsMasterLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
@@ -76,7 +84,8 @@ Resources:
             test:
               command: "docker run -d -p 80:8080 jenkins/jenkins:lts"
     Properties:
-      SubnetId: !ImportValue network-Subnet1
+      SubnetId: 
+        Fn::ImportValue: !Sub "${NetworkStackParameter}-Subnet1"
       LaunchTemplate:
         LaunchTemplateId:
           Ref: JenkinsMasterLaunchTemplate
@@ -99,8 +108,8 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
       Subnets: 
-        - !ImportValue network-Subnet1
-        - !ImportValue network-Subnet2
+        - Fn::ImportValue: !Sub  "${NetworkStackParameter}-Subnet1"
+        - Fn::ImportValue: !Sub "${NetworkStackParameter}-Subnet2"
       SecurityGroups:
         - !Ref JenkinsMasterLoadBalancerSecurityGroup
 
@@ -140,7 +149,8 @@ Resources:
       Targets:
         - Id: !GetAtt JenkinsMaster.PrivateIp
           Port: 80
-      VpcId: !ImportValue network-VPC
+      VpcId: 
+        Fn::ImportValue: !Sub "${NetworkStackParameter}-VPC"
       HealthCheckPath: /login
 
   JenkinsRecordSetGroup:
