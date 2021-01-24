@@ -1,0 +1,166 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Resources:
+
+  # Create VPC in current region (should be ap-southeast-2)
+  MorleyStuffVPC:
+      Type: AWS::EC2::VPC
+      Properties:
+        CidrBlock: '10.0.0.0/24'
+
+
+  # Create internet gateway and attach it to VPC for public access
+  InternetGateway:
+    Type : AWS::EC2::InternetGateway
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref MorleyStuffVPC
+      InternetGatewayId: !Ref InternetGateway
+
+
+  # Create route table to be used by subnets to route all traffic to internet gateway
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MorleyStuffVPC
+
+  GatewayRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+
+  
+  # Create network acl (sort of subnet firewall) and attach to VPC
+  NetworkACL:
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId: !Ref MorleyStuffVPC
+
+  NaclEntryAllowOutbound: # Outbound traffic is fine, allow all
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref NetworkACL
+      RuleNumber: 100
+      RuleAction: allow
+      
+      Protocol: -1 # Shorthand for all protocols / all ports
+      CidrBlock: 0.0.0.0/0
+      Egress: true
+      
+
+  NaclEntryAllowSSH: # Allow inbound SSH connections
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref NetworkACL
+      RuleNumber: 100
+      RuleAction: allow
+
+      Protocol: 6 # (TCP)
+      CidrBlock: 0.0.0.0/0
+      PortRange:
+        From: 22
+        To: 22
+
+  NaclEntryAllowHTTP: # Allow inbound HTTP connections
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref NetworkACL
+      RuleNumber: 101
+      RuleAction: allow
+
+      Protocol: 6 # (TCP)
+      CidrBlock: 0.0.0.0/0
+      PortRange:
+        From: 80
+        To: 80
+
+  NaclEntryAllowHTTPS: # Allow inbound HTTPS connections
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref NetworkACL
+      RuleNumber: 103
+      RuleAction: allow
+      
+      Protocol: 6 # (TCP)
+      CidrBlock: 0.0.0.0/0
+      PortRange:
+        From: 443
+        To: 443
+
+  NaclEntryAllowReturnHTTP: # For outbound HTTP/HTTPS, after initial connection, traffic is passed to a different high numbered port
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref NetworkACL
+      RuleNumber: 102
+      RuleAction: allow
+
+      Protocol: 6 # (TCP)
+      CidrBlock: 0.0.0.0/0
+      PortRange:
+        From: 1024
+        To: 65535
+
+  
+  # Create Subnet 1 and attach Route Table & NACL
+  Subnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MorleyStuffVPC
+      CidrBlock: '10.0.0.0/26'
+      AvailabilityZone: ap-southeast-2a
+      MapPublicIpOnLaunch: true
+
+  RouteTableAssociationSubnet1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref Subnet1
+      RouteTableId: !Ref RouteTable
+  
+  NaclAssociationSubnet1:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      SubnetId: !Ref Subnet1
+      NetworkAclId: !Ref NetworkACL
+
+
+  # Create Subnet 2 and attach Route Table & NACL
+  Subnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MorleyStuffVPC
+      CidrBlock: '10.0.0.128/26'
+      AvailabilityZone: ap-southeast-2b
+      MapPublicIpOnLaunch: true
+
+  RouteTableAssociationSubnet2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref Subnet2
+      RouteTableId: !Ref RouteTable
+      
+  NaclAssociationSubnet2:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      SubnetId: !Ref Subnet2
+      NetworkAclId: !Ref NetworkACL
+      
+Outputs:
+
+  VPC:
+    Value: !Ref MorleyStuffVPC
+    Export:
+      Name: !Sub "${AWS::StackName}-VPC"
+
+  Subnet1:
+    Value: !Ref Subnet1
+    Export:
+      Name: !Sub "${AWS::StackName}-Subnet1"
+
+  Subnet2:
+    Value: !Ref Subnet2
+    Export:
+      Name: !Sub "${AWS::StackName}-Subnet2"

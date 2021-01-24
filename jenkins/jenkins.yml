@@ -2,135 +2,6 @@ AWSTemplateFormatVersion: "2010-09-09"
 
 Resources:
 
-  InfrastructureVPC:
-    Type: AWS::EC2::VPC
-    Properties:
-      CidrBlock: '10.0.0.0/24'
-
-  InfrastructureSubnet1:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref InfrastructureVPC
-      CidrBlock: '10.0.0.0/26'
-      AvailabilityZone: ap-southeast-2a
-      MapPublicIpOnLaunch: true
-
-  InfrastructureSubnet2:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref InfrastructureVPC
-      CidrBlock: '10.0.0.128/26'
-      AvailabilityZone: ap-southeast-2b
-      MapPublicIpOnLaunch: true
-
-  InfrastructureInternetGateway:
-    Type: AWS::EC2::InternetGateway
-
-  InfrastructureInternetGatewayAttachment:
-    Type: AWS::EC2::VPCGatewayAttachment
-    Properties:
-      InternetGatewayId: !Ref InfrastructureInternetGateway
-      VpcId: !Ref InfrastructureVPC
-
-  InfrastructureNetworkAcl:
-    Type: AWS::EC2::NetworkAcl
-    Properties:
-      VpcId: !Ref InfrastructureVPC
-
-  InfrastructureNaclAllowSSH:
-    Type: AWS::EC2::NetworkAclEntry
-    Properties:
-      NetworkAclId: !Ref InfrastructureNetworkAcl
-      Protocol: 6
-      RuleAction: allow
-      RuleNumber: 100
-      CidrBlock: 0.0.0.0/0
-      PortRange:
-        From: 22
-        To: 22
-
-  InfrastructureNaclAllowHTTP:
-    Type: AWS::EC2::NetworkAclEntry
-    Properties:
-      NetworkAclId: !Ref InfrastructureNetworkAcl
-      Protocol: 6
-      RuleAction: allow
-      RuleNumber: 101
-      CidrBlock: 0.0.0.0/0
-      PortRange:
-        From: 80
-        To: 80
-
-  InfrastructureNaclAllowReturnHTTP:
-    Type: AWS::EC2::NetworkAclEntry
-    Properties:
-      NetworkAclId: !Ref InfrastructureNetworkAcl
-      Protocol: 6
-      RuleAction: allow
-      RuleNumber: 102
-      CidrBlock: 0.0.0.0/0
-      PortRange:
-        From: 1024
-        To: 65535
-
-  InfrastructureNaclAllowHTTPS:
-    Type: AWS::EC2::NetworkAclEntry
-    Properties:
-      NetworkAclId: !Ref InfrastructureNetworkAcl
-      Protocol: 6
-      RuleAction: allow
-      RuleNumber: 103
-      CidrBlock: 0.0.0.0/0
-      PortRange:
-        From: 443
-        To: 443
-
-  InfrastructureNaclAllowOutbound:
-    Type: AWS::EC2::NetworkAclEntry
-    Properties:
-      NetworkAclId: !Ref InfrastructureNetworkAcl
-      Protocol: -1
-      RuleAction: allow
-      RuleNumber: 100
-      Egress: true
-      CidrBlock: 0.0.0.0/0
-
-  InfrastructureSubnet1NaclAssociation:
-    Type: "AWS::EC2::SubnetNetworkAclAssociation"
-    Properties:
-      NetworkAclId: !Ref InfrastructureNetworkAcl
-      SubnetId: !Ref InfrastructureSubnet1
-
-  InfrastructureSubnet2NaclAssociation:
-    Type: "AWS::EC2::SubnetNetworkAclAssociation"
-    Properties:
-      NetworkAclId: !Ref InfrastructureNetworkAcl
-      SubnetId: !Ref InfrastructureSubnet2
-
-  InfrastructureRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref InfrastructureVPC
-
-  InfrastructureSubnet1RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId: !Ref InfrastructureRouteTable
-      SubnetId: !Ref InfrastructureSubnet1
-
-  InfrastructureSubnet2RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId: !Ref InfrastructureRouteTable
-      SubnetId: !Ref InfrastructureSubnet2
-
-  InfrastructureInternetGatewayRoute:
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId: !Ref InfrastructureRouteTable
-      DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref InfrastructureInternetGateway
-
   JenkinsMasterSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -144,7 +15,7 @@ Resources:
         FromPort: 80
         ToPort: 80
         CidrIp: 0.0.0.0/0
-      VpcId: !Ref InfrastructureVPC
+      VpcId: !ImportValue network-VPC
 
   JenkinsMasterLoadBalancerSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -159,7 +30,7 @@ Resources:
         FromPort: 443
         ToPort: 443
         CidrIp: 0.0.0.0/0
-      VpcId: !Ref InfrastructureVPC
+      VpcId: !ImportValue network-VPC
 
   JenkinsMasterLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
@@ -205,7 +76,7 @@ Resources:
             test:
               command: "docker run -d -p 80:8080 jenkins/jenkins:lts"
     Properties:
-      SubnetId: !Ref InfrastructureSubnet1
+      SubnetId: !ImportValue network-Subnet1
       LaunchTemplate:
         LaunchTemplateId:
           Ref: JenkinsMasterLaunchTemplate
@@ -227,7 +98,9 @@ Resources:
   JenkinsLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Subnets: [!Ref InfrastructureSubnet1, !Ref InfrastructureSubnet2]
+      Subnets: 
+        - !ImportValue network-Subnet1
+        - !ImportValue network-Subnet2
       SecurityGroups:
         - !Ref JenkinsMasterLoadBalancerSecurityGroup
 
@@ -267,7 +140,7 @@ Resources:
       Targets:
         - Id: !GetAtt JenkinsMaster.PrivateIp
           Port: 80
-      VpcId: !Ref InfrastructureVPC
+      VpcId: !ImportValue network-VPC
       HealthCheckPath: /login
 
   JenkinsRecordSetGroup:
