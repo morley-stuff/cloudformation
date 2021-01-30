@@ -28,8 +28,6 @@ Resources:
   # Configuration and installation definition
   JenkinsMaster:
     Type: AWS::EC2::Instance
-    DependsOn:
-      - JenkinsMasterLaunchTemplate
     Metadata:
       AWS::CloudFormation::Init:
         configSets:
@@ -63,7 +61,7 @@ Resources:
       LaunchTemplate:
         LaunchTemplateId:
           Ref: JenkinsMasterLaunchTemplate
-        Version: 1
+        Version: '1'
       SecurityGroupIds:
       - Fn::ImportValue: !Sub "${SecurityGroupStackParameter}-SecurityGroupSSH"
       - Fn::ImportValue: !Sub "${SecurityGroupStackParameter}-SecurityGroupWebServer"
@@ -102,7 +100,7 @@ Resources:
           RedirectConfig:
             Host: '#{host}'
             Path: '/#{path}'
-            Port: 443
+            Port: '443'
             Protocol: HTTPS
             StatusCode: HTTP_301
 
