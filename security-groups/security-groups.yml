@@ -1,0 +1,49 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+  NetworkStackParameter:
+    Type: String
+    Default: network
+    Description: Network stack to deploy into.
+
+Resources:
+  
+  SecurityGroupSSH:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group allows for inbound traffic on SSH port from anywhere
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+      VpcId: 
+        Fn::ImportValue: !Sub "${NetworkStackParameter}-VPC"
+
+  SecurityGroupWebServer:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group allows for inbound traffic on HTTP & HTTPS ports
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: 0.0.0.0/0
+      VpcId: 
+        Fn::ImportValue: !Sub "${NetworkStackParameter}-VPC"
+
+Outputs:
+
+  SecurityGroupSSH:
+    Value: !Ref SecurityGroupSSH
+    Export:
+      Name: !Sub "${AWS::StackName}-SecurityGroupSSH"
+
+  SecurityGroupWebServer:
+    Value: !Ref SecurityGroupWebServer
+    Export:
+      Name: !Sub "${AWS::StackName}-SecurityGroupWebServer"

@@ -5,41 +5,14 @@ Parameters:
     Type: String
     Default: network
     Description: Network stack to deploy into.
-
+  SecurityGroupStackParameter:
+    Type: String
+    Default: security-groups
+    Description: Security group definitions.
+  
 Resources:
 
-  JenkinsMasterSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Security group for Jenkins master instance (ssh & web traffic)
-      SecurityGroupIngress:
-      - IpProtocol: tcp
-        FromPort: 22
-        ToPort: 22
-        CidrIp: 0.0.0.0/0
-      - IpProtocol: tcp
-        FromPort: 80
-        ToPort: 80
-        CidrIp: 0.0.0.0/0
-      VpcId: 
-        Fn::ImportValue: !Sub "${NetworkStackParameter}-VPC"
-
-  JenkinsMasterLoadBalancerSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Security group for Jenkins master load balancer
-      SecurityGroupIngress:
-      - IpProtocol: tcp
-        FromPort: 80
-        ToPort: 80
-        CidrIp: 0.0.0.0/0
-      - IpProtocol: tcp
-        FromPort: 443
-        ToPort: 443
-        CidrIp: 0.0.0.0/0
-      VpcId: 
-        Fn::ImportValue: !Sub "${NetworkStackParameter}-VPC"
-
+  # Hardware aquisition
   JenkinsMasterLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
@@ -52,6 +25,7 @@ Resources:
           SpotOptions:
             MaxPrice: "0.005"
 
+  # Configuration and installation definition
   JenkinsMaster:
     Type: AWS::EC2::Instance
     DependsOn:
@@ -90,7 +64,9 @@ Resources:
         LaunchTemplateId:
           Ref: JenkinsMasterLaunchTemplate
         Version: 1
-      SecurityGroupIds: [!Ref JenkinsMasterSecurityGroup]
+      SecurityGroupIds:
+      - Fn::ImportValue: !Sub "${SecurityGroupStackParameter}-SecurityGroupSSH"
+      - Fn::ImportValue: !Sub "${SecurityGroupStackParameter}-SecurityGroupWebServer"
       KeyName: ssh-laptop
       UserData:
         Fn::Base64: !Sub |
@@ -104,15 +80,17 @@ Resources:
             --configsets Install \
             --region ${ AWS::Region }
 
+  # Load balancer as http termination point
   JenkinsLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
       Subnets: 
-        - Fn::ImportValue: !Sub  "${NetworkStackParameter}-Subnet1"
+        - Fn::ImportValue: !Sub "${NetworkStackParameter}-Subnet1"
         - Fn::ImportValue: !Sub "${NetworkStackParameter}-Subnet2"
       SecurityGroups:
-        - !Ref JenkinsMasterLoadBalancerSecurityGroup
+      - Fn::ImportValue: !Sub "${SecurityGroupStackParameter}-SecurityGroupWebServer"
 
+  # Redirect http to https
   JenkinsLoadBalancerHTTPListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
@@ -128,6 +106,7 @@ Resources:
             Protocol: HTTPS
             StatusCode: HTTP_301
 
+  # Forward https traffic to jenkins http endpoint
   JenkinsLoadBalancerHTTPSListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
@@ -140,6 +119,7 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref JenkinsMasterTargetGroup
 
+  # Definition of jenkins http endpoint for load balancer
   JenkinsMasterTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
@@ -153,6 +133,7 @@ Resources:
         Fn::ImportValue: !Sub "${NetworkStackParameter}-VPC"
       HealthCheckPath: /login
 
+  # DNS record for jenkins.morleystuff.com
   JenkinsRecordSetGroup:
     Type: 'AWS::Route53::RecordSetGroup'
     DependsOn:
